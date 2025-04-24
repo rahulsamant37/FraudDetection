@@ -9,6 +9,6 @@ lightgbm
 imblearn
 pandas
 scikit-learn
-botos
+boto3
 tqdm
 tqdm-joblib

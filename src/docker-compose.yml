@@ -1,3 +1,4 @@
+---
 x-airflow-common:
   &airflow-common
   build: ./airflow
@@ -12,8 +13,17 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    # yamllint disable rule:line-length
+    # Use simple http server on scheduler for health checks
+    # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
+    # yamllint enable rule:line-length
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
+    # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    # The following line can be used to set a custom config file, stored in the local config folder
+    # If you want to use it, outcomment it and replace airflow.cfg with the name of your config file
+    # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
     MLFLOW_TRACKING_URI: 'http://mlflow-server:5500'
     MLFLOW_S3_ENDPOINT_URL: 'http://minio:9000'
   volumes:
@@ -23,7 +33,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ./models:/app/models
     - ./config.yaml:/app/config.yaml
-    - ./env:/app/.env
+    - ./.env:/app/.env
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -41,6 +51,7 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
+      - ./init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
@@ -227,7 +238,6 @@ services:
       - airflow
     networks:
       - fraud-detection
-
   flower:
     <<: *airflow-common
     command: celery flower
@@ -265,12 +275,11 @@ services:
       /usr/bin/mc mb minio/mlflow;
       exit 0;
       "
-    
     volumes:
       - ./wait-for-it.sh:/tmp/wait-for-it.sh
     networks:
       - fraud-detection
-  
+
   minio:
     restart: always
     image: minio/minio
@@ -279,7 +288,7 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
-    command: server /data --console-address ":9001" --address ":9000"
+    command: server /data --console-address ':9001' --address ':9000'
     environment:
       - MINIO_ROOT_USER=${MINIO_USERNAME}
       - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
@@ -288,8 +297,7 @@ services:
     networks:
       - fraud-detection
 
-
-# MLFLOw SERVER
+  #  MLFLOW SERVER
   mlflow-server:
     restart: always
     build: ./mlflow
@@ -304,9 +312,9 @@ services:
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-    command: mlflow server --port 5500 --host 0.0.0.0 --backend-store-uri postgresql+psycopg2://mlflow:mlflow@mlflowpostgres/mlflow
-    network_mode: 
-      -  fraud-detection
+    command: mlflow server --port 5500 --host 0.0.0.0 --backend-store-uri postgresql+psycopg2://mlflow:mlflow@postgres/mlflow --default-artifact-root s3://mlflow
+    networks:
+      - fraud-detection
 
 volumes:
   postgres-db-volume:

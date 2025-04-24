@@ -5,10 +5,10 @@ USER root
 RUN mkdir -p /app/models
 
 USER airflow
-# Copy the requirements.txt
-COPY requirements.txt /tmo/requirements.txt
+# Copy requirements file
+COPY requirements.txt /tmp/requirements.txt
 
-# Install pip install -r requirements.txt
+# Install Python packages as root (system-wide)
 RUN pip install -r /tmp/requirements.txt
 
 # Switch back to airflow user for safety
